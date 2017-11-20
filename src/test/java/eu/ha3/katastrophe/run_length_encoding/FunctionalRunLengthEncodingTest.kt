@@ -11,10 +11,9 @@ internal class FunctionalRunLengthEncodingTest: AbstractRunLengthEncodingTest() 
 
     class FunctionalRunLengthEncoding<T>: RunLengthEncoding<T> {
         override fun runLengthEncodingOf(raws: List<T>): List<Item<T>> = raws
-                .fold<T, MutableList<Item<T>>>(mutableItemsOf()) { acc, obj -> encodingFold(acc, obj) }
-                .toList()
+                .fold(Item.of()) { acc, obj -> encodingFold(acc, obj) }
 
-        private fun <T> encodingFold(acc: MutableList<Item<T>>, rhs: T): MutableList<Item<T>> {
+        private fun <T> encodingFold(acc: List<Item<T>>, rhs: T): List<Item<T>> {
             val lhs: Item<T> by lazy { acc.last() }
 
             return when {
@@ -25,7 +24,5 @@ internal class FunctionalRunLengthEncodingTest: AbstractRunLengthEncodingTest() 
 
             } as MutableList<Item<T>>
         }
-
-        private fun <T> mutableItemsOf(vararg items: Item<T>): MutableList<Item<T>> = mutableListOf(*items)
     }
 }

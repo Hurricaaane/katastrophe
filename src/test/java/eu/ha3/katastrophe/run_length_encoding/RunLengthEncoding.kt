@@ -17,7 +17,7 @@ interface Item<T> {
 }
 
 data class Run<T>(val elt: Obj<T>, val length: Int) : Item<T> {
-    fun increment(): Item<T> = Run(elt, length + 1)
+    fun increment(): Run<T> = Run(elt, length + 1)
     override fun toString(): String = "{$elt, $length}"
 }
 

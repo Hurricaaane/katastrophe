@@ -74,6 +74,6 @@ abstract class AbstractRunLengthEncodingTest {
     @Test
     fun runLengthEncoding_should_not_StackOverflow_on_large_inputs() {
         val random = Random(0) // Seeded in purpose
-        println(rle().runLengthEncodingOf(IntStream.range(0, 20_000).map { random.nextInt(4) }.toList()))
+        rle().runLengthEncodingOf(IntStream.range(0, 200_000).map { random.nextInt(4) }.toList())
     }
 }

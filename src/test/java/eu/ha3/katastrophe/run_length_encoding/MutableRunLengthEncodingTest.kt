@@ -26,13 +26,13 @@ internal class MutableRunLengthEncodingTest: AbstractRunLengthEncodingTest() {
             val rhs = items[1] as Obj
 
             return when {
-                lhs is Run<T> && lhs.elt == rhs -> combineAndEncode(items, lhs.increment())
-                lhs is Obj && lhs == rhs -> combineAndEncode(items, Run(lhs, 2))
+                lhs is Run<T> && lhs.elt == rhs -> combineAndEncode(lhs.increment(), items)
+                lhs is Obj && lhs == rhs -> combineAndEncode(Run(lhs, 2), items)
                 else -> encode(items.subList(1, items.size))
             }
         }
 
-        private fun <T> combineAndEncode(items: MutableList<Item<T>>, replacement: Item<T>) {
+        private fun <T> combineAndEncode(replacement: Item<T>, items: MutableList<Item<T>>) {
             items[0] = replacement
             items.removeAt(1)
             encode(items)
