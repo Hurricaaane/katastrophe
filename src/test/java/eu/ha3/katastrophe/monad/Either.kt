@@ -102,38 +102,54 @@ class EitherTest {
         )))
     }
 
-    class AuthenticationService {
-        fun checkIfAuthenticated(it: String): Either<Err, String> = when (it) {
+    interface IIAuthenticationService {
+        fun checkIfAuthenticated(it: String): Either<Err, String>
+    }
+
+    class AuthenticationService : IIAuthenticationService {
+        override fun checkIfAuthenticated(it: String): Either<Err, String> = when (it) {
             "hello" -> Either.ret(it)
             else -> Left(Err.NOT_AUTHENTICATED)
         }
     }
 
-    class MessageRepository {
-        fun getById(it: String): Either<Err, SomeMessage?> = when (it) {
+    interface IMessageRepository {
+        fun getById(it: String): Either<Err, SomeMessage?>
+    }
+
+    class MessageRepository : IMessageRepository {
+        override fun getById(it: String): Either<Err, SomeMessage?> = when (it) {
             "1992" -> Either.ret(SomeMessage("Hay", "1992 Message"))
             "9999" -> Either.Left(Err.UNKNOWN_ERROR_WITH_MESSAGE_REPOSITORY)
             else -> Either.ret(null)
         }
     }
 
-    class UseCase(private val messageRepository: MessageRepository) {
-        fun fetchMessage(it: FetchMessageQuery): Either<Err, SomeMessage?> {
+    interface IUseCase {
+        fun fetchMessage(it: FetchMessageQuery): Either<Err, SomeMessage?>
+    }
+
+    class UseCase(private val messageRepository: MessageRepository) : IUseCase {
+        override fun fetchMessage(it: FetchMessageQuery): Either<Err, SomeMessage?> {
             return Either.ret<Err, FetchMessageQuery>(it)
-                    .bind(this::getMessageById)
+                    .bind(this::getMessageByIdFromRepository)
         }
 
-        private fun getMessageById(it: FetchMessageQuery): Either<Err, SomeMessage?> {
+        private fun getMessageByIdFromRepository(it: FetchMessageQuery): Either<Err, SomeMessage?> {
             return Either.ret<Err, FetchMessageQuery>(it)
                     .map { it.id }
                     .bind(messageRepository::getById)
         }
     }
 
-    class Controller(private val useCase: UseCase, authenticationService: AuthenticationService) {
+    interface IController {
+        fun processRequest(request: RequestModel): ResponseModel
+    }
+
+    class Controller(private val useCase: UseCase, authenticationService: AuthenticationService) : IController {
         private val controllerAuthenticationLogic: ControllerAuthenticationLogic
 
-        fun processRequest(request: RequestModel) = Either.ret<Err, RequestModel>(request)
+        override fun processRequest(request: RequestModel) = Either.ret<Err, RequestModel>(request)
                 .bind(controllerAuthenticationLogic::checkAuthentication)
                 .bind(this::asFetchMessageQuery)
                 .bind(useCase::fetchMessage)
