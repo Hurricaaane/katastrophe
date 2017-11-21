@@ -35,9 +35,23 @@ sealed class Either<L, R> {
         is Either.Right<L, R> -> this.r
     }
 
+    infix fun verify(leftGenerator: (R) -> (L?)): Either<L, R> = when (this) {
+        is Either.Left<L, R> -> Left<L, R>(this.l)
+        is Either.Right<L, R> -> leftGenerator(this.r)?.let { Left<L, R>(it) } ?: Right(this.r)
+    }
+
+    infix fun verifyMonad(leftMonadGenerator: (R) -> (Either<L, *>)): Either<L, R> = when (this) {
+        is Either.Left<L, R> -> Left<L, R>(this.l)
+        is Either.Right<L, R> -> this.verify { leftMonadGenerator(this.r).left() }
+    }
+
+    fun left(): L? = when (this) {
+        is Either.Left<L, R> -> this.l
+        is Either.Right<L, R> -> null
+    }
+
     companion object {
         fun <L, R> ret(a: R) = Right<L, R>(a)
-        fun <L, R> validate(a: R, f: (R) -> L?) = f(a)?: Right<L, R>(a)
     }
 }
 class EitherTest {
@@ -103,13 +117,13 @@ class EitherTest {
     }
 
     interface IIAuthenticationService {
-        fun checkIfAuthenticated(it: String): Either<Err, String>
+        fun checkIfAuthenticated(it: String): Err?
     }
 
     class AuthenticationService : IIAuthenticationService {
-        override fun checkIfAuthenticated(it: String): Either<Err, String> = when (it) {
-            "hello" -> Either.ret(it)
-            else -> Left(Err.NOT_AUTHENTICATED)
+        override fun checkIfAuthenticated(it: String): Err? = when (it) {
+            "hello" -> null
+            else -> Err.NOT_AUTHENTICATED
         }
     }
 
@@ -150,19 +164,19 @@ class EitherTest {
         private val controllerAuthenticationLogic: ControllerAuthenticationLogic
 
         override fun processRequest(request: RequestModel) = Either.ret<Err, RequestModel>(request)
-                .bind(controllerAuthenticationLogic::checkAuthentication)
+                .verify(controllerAuthenticationLogic::checkAuthentication)
                 .bind(this::asFetchMessageQuery)
                 .bind(useCase::fetchMessage)
                 .map(this::toResponse)
                 .otherwise(this::toError)
 
         private fun asFetchMessageQuery(it: RequestModel): Either<Err, FetchMessageQuery> = Either.ret<Err, RequestModel>(it)
-                .bind(this::validateRequestForMessageQuery)
+                .verify(this::validateRequestForMessageQuery)
                 .map(this::requestToFetchMessageQuery)
 
-        private fun validateRequestForMessageQuery(it: RequestModel): Either<Err, RequestModel> = when {
-            !it.parameters.any { it.key == "id" } -> Left(Err.PARAMETER_MISSING_ID)
-            else -> Either.ret(it)
+        private fun validateRequestForMessageQuery(it: RequestModel): Err? = when {
+            !it.parameters.any { it.key == "id" } -> Err.PARAMETER_MISSING_ID
+            else -> null
         }
 
         private fun requestToFetchMessageQuery(it: RequestModel): FetchMessageQuery =
@@ -176,19 +190,19 @@ class EitherTest {
         private fun toError(it: Err): ResponseModel = ResponseModel(it.status, it.name)
 
         class ControllerAuthenticationLogic(private val authenticationService: AuthenticationService) {
-            fun checkAuthentication(me: RequestModel): Either<Err, RequestModel> = Either.ret<Err, RequestModel>(me)
-                    .bind(this::validateAuthHeader)
+            fun checkAuthentication(me: RequestModel): Err? = Either.ret<Err, RequestModel>(me)
+                    .verify(this::validateAuthHeader)
                     .map(this::extractAuthorizationHeader)
                     .bind(this::validateTokenType)
                     .map(this::extractBearerToken)
-                    .bind(authenticationService::checkIfAuthenticated)
-                    .map { me }
+                    .verify(authenticationService::checkIfAuthenticated)
+                    .left()
 
-            private fun validateAuthHeader(it: RequestModel): Either<Err, RequestModel> = when {
-                it.headers.any { it.key.startsWith("Authorization ") } -> Left(Err.AUTHORIZATION_HEADER_HAS_TRAILING_WHITESPACE)
-                !it.headers.any { it.key == "Authorization" } -> Left(Err.AUTHORIZATION_HEADER_MISSING)
-                it.headers.first { it.key == "Authorization" }.values.size > 1 -> Left(Err.TOO_MANY_AUTHORIZATION_HEADERS)
-                else -> Either.ret(it)
+            private fun validateAuthHeader(it: RequestModel): Err? = when {
+                it.headers.any { it.key.startsWith("Authorization ") } -> Err.AUTHORIZATION_HEADER_HAS_TRAILING_WHITESPACE
+                !it.headers.any { it.key == "Authorization" } -> Err.AUTHORIZATION_HEADER_MISSING
+                it.headers.first { it.key == "Authorization" }.values.size > 1 -> Err.TOO_MANY_AUTHORIZATION_HEADERS
+                else -> null
             }
 
             private fun extractAuthorizationHeader(it: RequestModel): String = it.headers.filter { it.key == "Authorization" }.first().values.first()
