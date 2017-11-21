@@ -2,6 +2,11 @@ package eu.ha3.katastrophe.monad
 
 import eu.ha3.katastrophe.monad.Either.Left
 import org.junit.jupiter.api.Test
+import java.time.DateTimeException
+import java.time.LocalDate
+import java.time.Period
+import java.time.format.DateTimeFormatter
+import java.time.temporal.UnsupportedTemporalTypeException
 
 /**
  * https://kotlin.link/articles/Exploring-an-Either-Monad-in-Kotlin.html
@@ -63,15 +68,21 @@ class EitherTest {
         NOT_BEARER_TOKEN(400),
         TOKEN_HAS_TRAILING_WHITESPACE(400),
         PARAMETER_MISSING_ID(400),
-        UNKNOWN_ERROR_WITH_MESSAGE_REPOSITORY(500)
+        UNKNOWN_ERROR_WITH_MESSAGE_REPOSITORY(500),
+        DATE_FORMAT_IS_INVALID(400),
+        PARAMETER_MISSING_BEGIN_DATE(400),
+        PARAMETER_MISSING_END_DATE(400)
     }
 
-    data class RequestModel(val headers: List<Header>, val parameters: List<Parameter>)
+    data class RequestModel(val headers: List<Header>, val parameters: List<Parameter>, val method: String?) {
+        constructor(headers: List<Header>, parameters: List<Parameter>) : this(headers, parameters, null)
+    }
     data class ResponseModel(val status: Int, val body: String)
 
     data class Header(val key: String, val values: List<String>)
     data class Parameter(val key: String, val value: String)
     data class FetchMessageQuery(val id: String)
+    data class CountBetweenQuery(val begin: LocalDate, val end: LocalDate)
     data class SomeMessage(val author: String, val content: String)
 
     @Test
@@ -114,6 +125,35 @@ class EitherTest {
                 headers = listOf(Header("Authorization", listOf("Bearer hello"))),
                 parameters = listOf(Parameter("id", "9999"))
         )))
+        println(controller.processRequest(RequestModel(
+                headers = listOf(Header("Authorization", listOf("Bearer hello"))),
+                parameters = listOf(Parameter("id", "9999"))
+        )))
+        println(controller.processRequest(RequestModel(
+                headers = listOf(Header("Authorization", listOf("Bearer hello"))),
+                parameters = listOf(Parameter("begin", "2012-01-01")),
+                method = "countBetween"
+        )))
+        println(controller.processRequest(RequestModel(
+                headers = listOf(Header("Authorization", listOf("Bearer hello"))),
+                parameters = listOf(Parameter("end", "2012-04-20")),
+                method = "countBetween"
+        )))
+        println(controller.processRequest(RequestModel(
+                headers = listOf(Header("Authorization", listOf("Bearer hello"))),
+                parameters = listOf(Parameter("begin", "2012-01-40"), Parameter("end", "2012-04-20")),
+                method = "countBetween"
+        )))
+        println(controller.processRequest(RequestModel(
+                headers = listOf(Header("Authorization", listOf("Bearer hello"))),
+                parameters = listOf(Parameter("begin", "2012-01-01"), Parameter("end", "2012-04-40")),
+                method = "countBetween"
+        )))
+        println(controller.processRequest(RequestModel(
+                headers = listOf(Header("Authorization", listOf("Bearer hello"))),
+                parameters = listOf(Parameter("begin", "2012-01-01"), Parameter("end", "2012-04-20")),
+                method = "countBetween"
+        )))
     }
 
     interface IIAuthenticationService {
@@ -129,6 +169,7 @@ class EitherTest {
 
     interface IMessageRepository {
         fun getById(it: String): Either<Err, SomeMessage?>
+        fun countBetween(startInclusive: LocalDate, endExclusive: LocalDate): Either<Err, Long>
     }
 
     class MessageRepository : IMessageRepository {
@@ -137,10 +178,14 @@ class EitherTest {
             "9999" -> Either.Left(Err.UNKNOWN_ERROR_WITH_MESSAGE_REPOSITORY)
             else -> Either.ret(null)
         }
+
+        override fun countBetween(startInclusive: LocalDate, endExclusive: LocalDate): Either<Err, Long> =
+                Either.ret(Math.floor(Period.between(startInclusive, endExclusive).days * 1.5).toLong())
     }
 
     interface IUseCase {
         fun fetchMessage(it: FetchMessageQuery): Either<Err, SomeMessage?>
+        fun getCountBetween(it: CountBetweenQuery): Either<Err, Long>
     }
 
     class UseCase(private val messageRepository: MessageRepository) : IUseCase {
@@ -154,6 +199,22 @@ class EitherTest {
                     .map { it.id }
                     .bind(messageRepository::getById)
         }
+
+        override fun getCountBetween(it: CountBetweenQuery): Either<Err, Long> {
+            val curriedCountBetween = { start: LocalDate ->
+                { end: LocalDate ->
+                    messageRepository.countBetween(start, end)
+                }
+            }
+            val curriedGenerator: (CountBetweenQuery) -> Either<Err, Long> = { curriedCountBetween(it.begin)(it.end) }
+            val adapter: (CountBetweenQuery) -> Either<Err, Long> = { query: CountBetweenQuery ->
+                messageRepository.countBetween(query.begin, query.end)
+            }
+
+            return Either.ret<Err, CountBetweenQuery>(it)
+//                    .bind(test)
+                    .bind(curriedGenerator)
+        }
     }
 
     interface IController {
@@ -165,16 +226,60 @@ class EitherTest {
 
         override fun processRequest(request: RequestModel) = Either.ret<Err, RequestModel>(request)
                 .verify(controllerAuthenticationLogic::checkAuthentication)
-                .bind(this::asFetchMessageQuery)
-                .bind(useCase::fetchMessage)
-                .map(this::toResponse)
+                .bind(this::resolveAndExecuteAction)
                 .otherwise(this::toError)
 
+        private fun resolveAndExecuteAction(request: RequestModel): Either<Err, ResponseModel> {
+            val ret = Either.ret<Err, RequestModel>(request)
+
+            return request.method?.let {
+                when (it) {
+                    "countBetween" -> ret.bind(this::daysBetweenMethod)
+                    else -> ret.bind(this::defaultMethod)
+                }
+            } ?: ret.bind(this::defaultMethod)
+        }
+
+        private fun daysBetweenMethod(request: RequestModel): Either<Err, ResponseModel> = Either.ret<Err, RequestModel>(request)
+                .bind(this::asCountBetweenQuery)
+                .bind(useCase::getCountBetween)
+                .map(this::countAsResponse)
+
+        private fun asCountBetweenQuery(it: RequestModel): Either<Err, CountBetweenQuery> = Either.ret<Err, RequestModel>(it)
+                .verify(this::validateRequestForCountBetweenQuery)
+                .bind(this::requestCountBetweenQuery)
+
+        private fun requestCountBetweenQuery(it: RequestModel): Either<Err, CountBetweenQuery> {
+            try {
+                return Either.ret(CountBetweenQuery(extractLocalDate(it, "begin"), extractLocalDate(it, "end")))
+
+            } catch (e: UnsupportedTemporalTypeException) {
+                return Left(Err.DATE_FORMAT_IS_INVALID)
+
+            } catch (e: DateTimeException) {
+                return Left(Err.DATE_FORMAT_IS_INVALID)
+            }
+        }
+
+        private fun extractLocalDate(it: RequestModel, param: String) =
+                LocalDate.from(DateTimeFormatter.ISO_DATE.parse(it.parameters.first { it.key == param }.value))
+
+        private fun validateRequestForCountBetweenQuery(it: RequestModel): Err? = when {
+            !it.parameters.any { it.key == "begin" } -> Err.PARAMETER_MISSING_BEGIN_DATE
+            !it.parameters.any { it.key == "end" } -> Err.PARAMETER_MISSING_END_DATE
+            else -> null
+        }
+
+        private fun defaultMethod(request: RequestModel): Either<Err, ResponseModel> = Either.ret<Err, RequestModel>(request)
+                        .bind(this::asFetchMessageQuery)
+                        .bind(useCase::fetchMessage)
+                        .map(this::someMessageAsResponse)
+
         private fun asFetchMessageQuery(it: RequestModel): Either<Err, FetchMessageQuery> = Either.ret<Err, RequestModel>(it)
-                .verify(this::validateRequestForMessageQuery)
+                .verify(this::validateRequestForFetchMessageQuery)
                 .map(this::requestToFetchMessageQuery)
 
-        private fun validateRequestForMessageQuery(it: RequestModel): Err? = when {
+        private fun validateRequestForFetchMessageQuery(it: RequestModel): Err? = when {
             !it.parameters.any { it.key == "id" } -> Err.PARAMETER_MISSING_ID
             else -> null
         }
@@ -182,10 +287,12 @@ class EitherTest {
         private fun requestToFetchMessageQuery(it: RequestModel): FetchMessageQuery =
                 FetchMessageQuery(it.parameters.first { it.key == "id" }.value)
 
-        private fun toResponse(it: SomeMessage?): ResponseModel = when {
+        private fun someMessageAsResponse(it: SomeMessage?): ResponseModel = when {
             it != null -> ResponseModel(200, it.author + ": " + it.content)
             else -> ResponseModel(404, "Not found")
         }
+        private fun countAsResponse(it: Long): ResponseModel = ResponseModel(200, it.toString())
+
 
         private fun toError(it: Err): ResponseModel = ResponseModel(it.status, it.name)
 
