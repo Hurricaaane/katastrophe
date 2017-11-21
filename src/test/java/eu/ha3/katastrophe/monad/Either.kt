@@ -130,58 +130,64 @@ class EitherTest {
         }
     }
 
-    class Controller(private val useCase: UseCase, private val authenticationService: AuthenticationService) {
-        fun processRequest(request: RequestModel): ResponseModel {
-            return Either.ret<Err, RequestModel>(request)
-                    .bind(this::checkAuthentication)
-                    .bind(this::asFetchMessageQuery)
-                    .bind(useCase::fetchMessage)
-                    .map(this::toResponse)
-                    .otherwise(this::toError)
-        }
+    class Controller(private val useCase: UseCase, authenticationService: AuthenticationService) {
+        private val controllerAuthenticationLogic: ControllerAuthenticationLogic
 
-        private fun toError(it: Err): ResponseModel = ResponseModel(it.status, it.name)
-
-        private fun toResponse(it: SomeMessage?): ResponseModel = when {
-            it != null -> ResponseModel(200, it.author + ": " + it.content)
-            else -> ResponseModel(404, "Not found")
-        }
+        fun processRequest(request: RequestModel) = Either.ret<Err, RequestModel>(request)
+                .bind(controllerAuthenticationLogic::checkAuthentication)
+                .bind(this::asFetchMessageQuery)
+                .bind(useCase::fetchMessage)
+                .map(this::toResponse)
+                .otherwise(this::toError)
 
         private fun asFetchMessageQuery(it: RequestModel): Either<Err, FetchMessageQuery> = Either.ret<Err, RequestModel>(it)
                 .bind(this::validateRequestForMessageQuery)
                 .map(this::requestToFetchMessageQuery)
-
-        private fun requestToFetchMessageQuery(it: RequestModel): FetchMessageQuery =
-                FetchMessageQuery(it.parameters.first { it.key == "id" }.value)
 
         private fun validateRequestForMessageQuery(it: RequestModel): Either<Err, RequestModel> = when {
             !it.parameters.any { it.key == "id" } -> Left(Err.PARAMETER_MISSING_ID)
             else -> Either.ret(it)
         }
 
-        private fun checkAuthentication(me: RequestModel): Either<Err, RequestModel> = Either.ret<Err, RequestModel>(me)
-                .bind(this::validateAuthHeader)
-                .map(this::extractAuthorizationHeader)
-                .bind(this::validateTokenType)
-                .map(this::extractBearerToken)
-                .bind(authenticationService::checkIfAuthenticated)
-                .map { me }
+        private fun requestToFetchMessageQuery(it: RequestModel): FetchMessageQuery =
+                FetchMessageQuery(it.parameters.first { it.key == "id" }.value)
 
-        private fun validateAuthHeader(it: RequestModel): Either<Err, RequestModel> = when {
-            it.headers.any { it.key.startsWith("Authorization ") } -> Left(Err.AUTHORIZATION_HEADER_HAS_TRAILING_WHITESPACE)
-            !it.headers.any { it.key == "Authorization" } -> Left(Err.AUTHORIZATION_HEADER_MISSING)
-            it.headers.first { it.key == "Authorization" }.values.size > 1 -> Left(Err.TOO_MANY_AUTHORIZATION_HEADERS)
-            else -> Either.ret(it)
+        private fun toResponse(it: SomeMessage?): ResponseModel = when {
+            it != null -> ResponseModel(200, it.author + ": " + it.content)
+            else -> ResponseModel(404, "Not found")
         }
 
-        private fun extractAuthorizationHeader(it: RequestModel): String = it.headers.filter { it.key == "Authorization" }.first().values.first()
+        private fun toError(it: Err): ResponseModel = ResponseModel(it.status, it.name)
 
-        private fun validateTokenType(it: String): Either<Err, String> = when {
-            !it.startsWith("Bearer ") -> Left(Err.NOT_BEARER_TOKEN)
-            it.trim() != it -> Left(Err.TOKEN_HAS_TRAILING_WHITESPACE)
-            else -> Either.ret(it)
+        class ControllerAuthenticationLogic(private val authenticationService: AuthenticationService) {
+            fun checkAuthentication(me: RequestModel): Either<Err, RequestModel> = Either.ret<Err, RequestModel>(me)
+                    .bind(this::validateAuthHeader)
+                    .map(this::extractAuthorizationHeader)
+                    .bind(this::validateTokenType)
+                    .map(this::extractBearerToken)
+                    .bind(authenticationService::checkIfAuthenticated)
+                    .map { me }
+
+            private fun validateAuthHeader(it: RequestModel): Either<Err, RequestModel> = when {
+                it.headers.any { it.key.startsWith("Authorization ") } -> Left(Err.AUTHORIZATION_HEADER_HAS_TRAILING_WHITESPACE)
+                !it.headers.any { it.key == "Authorization" } -> Left(Err.AUTHORIZATION_HEADER_MISSING)
+                it.headers.first { it.key == "Authorization" }.values.size > 1 -> Left(Err.TOO_MANY_AUTHORIZATION_HEADERS)
+                else -> Either.ret(it)
+            }
+
+            private fun extractAuthorizationHeader(it: RequestModel): String = it.headers.filter { it.key == "Authorization" }.first().values.first()
+
+            private fun validateTokenType(it: String): Either<Err, String> = when {
+                !it.startsWith("Bearer ") -> Left(Err.NOT_BEARER_TOKEN)
+                it.trim() != it -> Left(Err.TOKEN_HAS_TRAILING_WHITESPACE)
+                else -> Either.ret(it)
+            }
+            private fun extractBearerToken(it: String): String = it.substring("Bearer ".length)
+
         }
 
-        private fun extractBearerToken(it: String): String = it.substring("Bearer ".length)
+        init {
+            this.controllerAuthenticationLogic = ControllerAuthenticationLogic(authenticationService)
+        }
     }
 }
