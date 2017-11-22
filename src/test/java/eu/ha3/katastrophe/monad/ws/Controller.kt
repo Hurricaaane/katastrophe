@@ -20,13 +20,13 @@ interface IController {
 class Controller(private val useCase: IMessageService, authenticationService: IAuthenticationService) : IController {
     private val controllerAuthenticationLogic: ControllerAuthenticationLogic
 
-    override fun processRequest(request: RequestModel) = Either.ret<Err, RequestModel>(request)
+    override fun processRequest(request: RequestModel) = Possibly.ret(request)
             .verify(controllerAuthenticationLogic::checkAuthentication)
             .bind(this::resolveAndExecuteAction)
             .otherwise(this::toError)
 
-    private fun resolveAndExecuteAction(request: RequestModel): Either<Err, ResponseModel> {
-        val ret = Either.ret<Err, RequestModel>(request)
+    private fun resolveAndExecuteAction(request: RequestModel): Possibly<ResponseModel> {
+        val ret = Possibly.ret(request)
 
         return request.method?.let {
             when (it) {
@@ -36,24 +36,24 @@ class Controller(private val useCase: IMessageService, authenticationService: IA
         } ?: ret.bind(this::defaultMethod)
     }
 
-    private fun daysBetweenMethod(request: RequestModel): Either<Err, ResponseModel> = Either.ret<Err, RequestModel>(request)
+    private fun daysBetweenMethod(request: RequestModel): Possibly<ResponseModel> = Possibly.ret(request)
             .bind(this::asCountBetweenQuery)
             .bind(useCase::getCountBetween)
             .map(this::countAsResponse)
 
-    private fun asCountBetweenQuery(it: RequestModel): Either<Err, CountBetweenQuery> = Either.ret<Err, RequestModel>(it)
+    private fun asCountBetweenQuery(it: RequestModel): Possibly<CountBetweenQuery> = Possibly.ret(it)
             .verify(this::validateRequestForCountBetweenQuery)
             .bind(this::requestCountBetweenQuery)
 
-    private fun requestCountBetweenQuery(it: RequestModel): Either<Err, CountBetweenQuery> {
+    private fun requestCountBetweenQuery(it: RequestModel): Possibly<CountBetweenQuery> {
         return try {
-            Either.ret(CountBetweenQuery(extractLocalDate(it, "begin"), extractLocalDate(it, "end")))
+            Possibly.ret(CountBetweenQuery(extractLocalDate(it, "begin"), extractLocalDate(it, "end")))
 
         } catch (e: UnsupportedTemporalTypeException) {
-            Either.Left(Err.DATE_FORMAT_IS_INVALID)
+            Possibly.Fail(Err.DATE_FORMAT_IS_INVALID)
 
         } catch (e: DateTimeException) {
-            Either.Left(Err.DATE_FORMAT_IS_INVALID)
+            Possibly.Fail(Err.DATE_FORMAT_IS_INVALID)
         }
     }
 
@@ -66,12 +66,12 @@ class Controller(private val useCase: IMessageService, authenticationService: IA
         else -> null
     }
 
-    private fun defaultMethod(request: RequestModel): Either<Err, ResponseModel> = Either.ret<Err, RequestModel>(request)
+    private fun defaultMethod(request: RequestModel): Possibly<ResponseModel> = Possibly.ret(request)
             .bind(this::asFetchMessageQuery)
             .bind(useCase::fetchMessage)
-            .map(this::someMessageAsResponse)
+            .bind(this::someMessageAsResponse)
 
-    private fun asFetchMessageQuery(it: RequestModel): Either<Err, FetchMessageQuery> = Either.ret<Err, RequestModel>(it)
+    private fun asFetchMessageQuery(it: RequestModel): Possibly<FetchMessageQuery> = Possibly.ret(it)
             .verify(this::validateRequestForFetchMessageQuery)
             .map(this::requestToFetchMessageQuery)
 
@@ -83,9 +83,9 @@ class Controller(private val useCase: IMessageService, authenticationService: IA
     private fun requestToFetchMessageQuery(it: RequestModel): FetchMessageQuery =
             FetchMessageQuery(it.parameters.first { it.key == "id" }.value)
 
-    private fun someMessageAsResponse(it: SomeMessage?): ResponseModel = when {
-        it != null -> ResponseModel(200, it.author + ": " + it.content)
-        else -> ResponseModel(404, "Not found")
+    private fun someMessageAsResponse(it: SomeMessage?): Possibly<ResponseModel> = when {
+        it != null -> Possibly.ret(ResponseModel(200, it.author + ": " + it.content))
+        else -> Possibly.Fail(Err.NOT_FOUND)
     }
 
     private fun countAsResponse(it: Long): ResponseModel = ResponseModel(200, it.toString())
@@ -94,7 +94,7 @@ class Controller(private val useCase: IMessageService, authenticationService: IA
     private fun toError(it: Err): ResponseModel = ResponseModel(it.status, it.name)
 
     class ControllerAuthenticationLogic(private val authenticationService: IAuthenticationService) {
-        fun checkAuthentication(me: RequestModel): Err? = Either.ret<Err, RequestModel>(me)
+        fun checkAuthentication(me: RequestModel): Err? = Possibly.ret(me)
                 .verify(this::validateAuthHeader)
                 .map(this::extractAuthorizationHeader)
                 .bind(this::validateTokenType)
@@ -111,10 +111,10 @@ class Controller(private val useCase: IMessageService, authenticationService: IA
 
         private fun extractAuthorizationHeader(it: RequestModel): String = it.headers.filter { it.key == "Authorization" }.first().values.first()
 
-        private fun validateTokenType(it: String): Either<Err, String> = when {
-            !it.startsWith("Bearer ") -> Either.Left(Err.NOT_BEARER_TOKEN)
-            it.trim() != it -> Either.Left(Err.TOKEN_HAS_TRAILING_WHITESPACE)
-            else -> Either.ret(it)
+        private fun validateTokenType(it: String): Possibly<String> = when {
+            !it.startsWith("Bearer ") -> Possibly.Fail(Err.NOT_BEARER_TOKEN)
+            it.trim() != it -> Possibly.Fail(Err.TOKEN_HAS_TRAILING_WHITESPACE)
+            else -> Possibly.ret(it)
         }
 
         private fun extractBearerToken(it: String): String = it.substring("Bearer ".length)

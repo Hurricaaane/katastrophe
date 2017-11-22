@@ -1,5 +1,7 @@
 package eu.ha3.katastrophe.monad.ws
 
+import eu.ha3.katastrophe.monad.Err
+
 /**
  * (Default template)
  * Created on 2017-11-22

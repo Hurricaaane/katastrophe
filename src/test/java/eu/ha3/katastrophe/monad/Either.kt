@@ -16,12 +16,12 @@ sealed class Either<L, R> {
     }
 
     infix fun <Rp> bind(f: (R) -> (Either<L, Rp>)): Either<L, Rp> = when (this) {
-        is Either.Left<L, R> -> Left<L, Rp>(this.l)
+        is Either.Left<L, R> -> Left(this.l)
         is Either.Right<L, R> -> f(this.r)
     }
 
     infix fun <Rp> map(f: (R) -> (Rp)): Either<L, Rp> = when (this) {
-        is Either.Left<L, R> -> Left<L, Rp>(this.l)
+        is Either.Left<L, R> -> Left(this.l)
         is Either.Right<L, R> -> Either.Right(f(this.r))
     }
 
@@ -33,12 +33,12 @@ sealed class Either<L, R> {
     }
 
     infix fun verify(leftGenerator: (R) -> (L?)): Either<L, R> = when (this) {
-        is Either.Left<L, R> -> Left<L, R>(this.l)
+        is Either.Left<L, R> -> Left(this.l)
         is Either.Right<L, R> -> leftGenerator(this.r)?.let { Left<L, R>(it) } ?: Right(this.r)
     }
 
     infix fun verifyMonad(leftMonadGenerator: (R) -> (Either<L, *>)): Either<L, R> = when (this) {
-        is Either.Left<L, R> -> Left<L, R>(this.l)
+        is Either.Left<L, R> -> Left(this.l)
         is Either.Right<L, R> -> this.verify { leftMonadGenerator(this.r).left() }
     }
 

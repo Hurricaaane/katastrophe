@@ -1,4 +1,4 @@
-package eu.ha3.katastrophe.monad.ws
+package eu.ha3.katastrophe.monad
 
 enum class Err(val status: Int) {
     AUTHORIZATION_HEADER_MISSING(401),
@@ -11,5 +11,6 @@ enum class Err(val status: Int) {
     UNKNOWN_ERROR_WITH_MESSAGE_REPOSITORY(500),
     DATE_FORMAT_IS_INVALID(400),
     PARAMETER_MISSING_BEGIN_DATE(400),
-    PARAMETER_MISSING_END_DATE(400)
+    PARAMETER_MISSING_END_DATE(400),
+    NOT_FOUND(404)
 }
