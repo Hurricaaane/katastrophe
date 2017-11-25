@@ -33,6 +33,10 @@ sealed class Perhaps<V> {
         is Perhaps.Vex<V> -> Perhaps.Vex(f(this.vex))
     }
 
+//    operator fun <Vp> plus(f: (V) -> (Vp)): Perhaps<Vp> = map(f);
+//    operator fun <Vp> times(f: (Perhaps<(V) -> (Vp)>)): Perhaps<Vp> = applying(f);
+//    operator fun <Vp> div(f: (V) -> (Perhaps<Vp>)): Perhaps<Vp> = bind(f);
+
     fun <Vp, A> map2(f: (V) -> (A) -> (Vp), a: Perhaps<A>): Perhaps<Vp> = a.applying(this.applying(Perhaps.ret(f)))
 
 //    fun <Vp, A> map2(f: (V) -> (A) -> (Vp)): Perhaps<((A) -> Vp)> = this.applying(Perhaps.ret(f))
@@ -63,6 +67,9 @@ sealed class Perhaps<V> {
         fun <V> ret(a: V) = Vex(a)
 
         fun <Vp, A, B> lift2helper(f: (A) -> (B) -> (Vp), a: Perhaps<A>, b: Perhaps<B>): Perhaps<Vp> =
-                b.applying(a.applying(Perhaps.ret(f)))
+                b.applying(a.map(f))
+
+//        fun <Vp, A, B> lift2helperoper(f: (A) -> (B) -> (Vp), a: Perhaps<A>, b: Perhaps<B>): Perhaps<Vp> =
+//                b * (a * Perhaps.ret(f))
     }
 }
