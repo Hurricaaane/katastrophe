@@ -62,7 +62,7 @@ sealed class Perhaps<V> {
     companion object {
         fun <V> ret(a: V) = Vex(a)
 
-        fun <Vp, V, A> directmap2(f: (V) -> (A) -> (Vp), v: Perhaps<V>, a: Perhaps<A>): Perhaps<Vp> =
-                a.applying(v.applying(Perhaps.ret(f)))
+        fun <Vp, A, B> lift2helper(f: (A) -> (B) -> (Vp), a: Perhaps<A>, b: Perhaps<B>): Perhaps<Vp> =
+                b.applying(a.applying(Perhaps.ret(f)))
     }
 }

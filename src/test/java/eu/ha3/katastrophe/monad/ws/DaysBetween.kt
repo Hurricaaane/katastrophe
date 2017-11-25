@@ -47,22 +47,6 @@ class DaysBetween(private val useCase: IMessageService) {
             LocalDate.from(DateTimeFormatter.ISO_DATE.parse(it.parameters.first { it.key == param }.value))
 
     private fun requestCountBetweenQueryB(me: RequestModel): Perhaps<CountBetweenQuery> {
-//        Perhaps.ret(me)
-//        val a = perhapsExtractLocalDate(me, "begin")
-//        val b = perhapsExtractLocalDate(me, "end")
-//
-//        Perhaps.ret(::CountBetweenQuery)
-//                .map { it(a, b) }
-//
-//        val map: Perhaps<Perhaps<Perhaps<LocalDate>>> = Perhaps.ret(::CountBetweenQuery.curried())
-//                .map { function -> Perhaps.ret(function).map { perhapsExtractLocalDate(me, "begin") } }
-//                .map { function -> Perhaps.ret(function).map { perhapsExtractLocalDate(me, "end") } }
-//
-//
-//        val map1: Perhaps<Perhaps.Vex<Perhaps.Vex<(begin: LocalDate) -> (end: LocalDate) -> CountBetweenQuery>>> = Perhaps.ret(::CountBetweenQuery.curried())
-//                .map { function -> Perhaps.ret(function).apply { perhapsExtractLocalDate(me, "begin") } }
-//                .map { function -> Perhaps.ret(function).apply { perhapsExtractLocalDate(me, "begin") } }
-
         val newCountBetweenQueryCurried: (begin: LocalDate) -> (end: LocalDate) -> CountBetweenQuery =
                 ::CountBetweenQuery.curried()
 
@@ -77,25 +61,8 @@ class DaysBetween(private val useCase: IMessageService) {
 
         val begin = perhapsExtractLocalDate(me, "begin");
         val end = perhapsExtractLocalDate(me, "end");
-        return Perhaps.directmap2(newCountBetweenQueryCurried, begin, end)
+        return Perhaps.lift2helper(newCountBetweenQueryCurried, begin, end)
     }
-
-//    private fun requestCountBetweenQueryB(me: RequestModel): Perhaps<CountBetweenQuery> {
-////        Perhaps.ret { it: RequestModel, param: String -> this.extractLocalDateOrThrow(it, param) }
-////                .bind { it(me, "begin") }
-//
-//        Perhaps.ret( me )
-//                .map { { it: RequestModel, param: String -> this.extractLocalDateOrThrow(it, param) }.curried() }
-//                .map
-//
-//        Perhaps.ret( { it: RequestModel, param: String -> this.extractLocalDateOrThrow(it, param) }.curried() )
-//                .bind(me)
-//
-//        val bind: Perhaps<String> = Perhaps.ret(::CountBetweenQuery)
-//                .map { Perhaps.ret { this::extractLocalDateOrThrow } ( this ).map ( it ).map ( "begin" ) }
-//                .map { Perhaps.ret { this::extractLocalDateOrThrow } (this ).map ( it ).map ( "end" ) }
-//
-//    }
 
     private fun perhapsExtractLocalDate(it: RequestModel, param: String): Perhaps<LocalDate> = try {
         Perhaps.ret(LocalDate.from(DateTimeFormatter.ISO_DATE.parse(it.parameters.first { it.key == param }.value)))
