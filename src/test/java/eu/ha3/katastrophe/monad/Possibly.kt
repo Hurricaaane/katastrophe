@@ -20,6 +20,14 @@ sealed class Possibly<V> {
         is Possibly.Vex<V> -> f(this.vex)
     }
 
+    infix fun <Vp> applying(f: (Possibly<(V) -> (Vp)>)): Possibly<Vp> = when (this) {
+        is Possibly.Fail<V> -> Fail(this.fail)
+        is Possibly.Vex<V> -> when (f) {
+            is Possibly.Fail<(V) -> (Vp)> -> Fail(f.fail)
+            is Possibly.Vex<(V) -> (Vp)> -> Possibly.ret(f.vex(this.vex))
+        }
+    }
+
     infix fun <Vp> map(f: (V) -> (Vp)): Possibly<Vp> = when (this) {
         is Possibly.Fail<V> -> Fail(this.fail)
         is Possibly.Vex<V> -> Possibly.Vex(f(this.vex))

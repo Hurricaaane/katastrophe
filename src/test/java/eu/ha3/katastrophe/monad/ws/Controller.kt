@@ -1,10 +1,6 @@
 package eu.ha3.katastrophe.monad.ws
 
 import eu.ha3.katastrophe.monad.*
-import java.time.DateTimeException
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.temporal.UnsupportedTemporalTypeException
 
 /**
  * (Default template)
@@ -17,7 +13,8 @@ interface IController {
     fun processRequest(request: RequestModel): ResponseModel
 }
 
-class Controller(private val useCase: IMessageService, authenticationService: IAuthenticationService) : IController {
+class Controller(private val messageService: IMessageService, authenticationService: IAuthenticationService) : IController {
+    private val daysBetween: DaysBetween = DaysBetween(messageService)
     private val controllerAuthenticationLogic: ControllerAuthenticationLogic
 
     override fun processRequest(request: RequestModel) = Possibly.ret(request)
@@ -30,45 +27,16 @@ class Controller(private val useCase: IMessageService, authenticationService: IA
 
         return request.method?.let {
             when (it) {
-                "countBetween" -> ret.bind(this::daysBetweenMethod)
+                "countBetween" -> ret.bind(daysBetween::action)
                 else -> ret.bind(this::defaultMethod)
             }
         } ?: ret.bind(this::defaultMethod)
     }
 
-    private fun daysBetweenMethod(request: RequestModel): Possibly<ResponseModel> = Possibly.ret(request)
-            .bind(this::asCountBetweenQuery)
-            .bind(useCase::getCountBetween)
-            .map(this::countAsResponse)
-
-    private fun asCountBetweenQuery(it: RequestModel): Possibly<CountBetweenQuery> = Possibly.ret(it)
-            .verify(this::validateRequestForCountBetweenQuery)
-            .bind(this::requestCountBetweenQuery)
-
-    private fun requestCountBetweenQuery(it: RequestModel): Possibly<CountBetweenQuery> {
-        return try {
-            Possibly.ret(CountBetweenQuery(extractLocalDate(it, "begin"), extractLocalDate(it, "end")))
-
-        } catch (e: UnsupportedTemporalTypeException) {
-            Possibly.Fail(Err.DATE_FORMAT_IS_INVALID)
-
-        } catch (e: DateTimeException) {
-            Possibly.Fail(Err.DATE_FORMAT_IS_INVALID)
-        }
-    }
-
-    private fun extractLocalDate(it: RequestModel, param: String) =
-            LocalDate.from(DateTimeFormatter.ISO_DATE.parse(it.parameters.first { it.key == param }.value))
-
-    private fun validateRequestForCountBetweenQuery(it: RequestModel): Err? = when {
-        !it.parameters.any { it.key == "begin" } -> Err.PARAMETER_MISSING_BEGIN_DATE
-        !it.parameters.any { it.key == "end" } -> Err.PARAMETER_MISSING_END_DATE
-        else -> null
-    }
 
     private fun defaultMethod(request: RequestModel): Possibly<ResponseModel> = Possibly.ret(request)
             .bind(this::asFetchMessageQuery)
-            .bind(useCase::fetchMessage)
+            .bind(messageService::fetchMessage)
             .bind(this::someMessageAsResponse)
 
     private fun asFetchMessageQuery(it: RequestModel): Possibly<FetchMessageQuery> = Possibly.ret(it)
@@ -87,8 +55,6 @@ class Controller(private val useCase: IMessageService, authenticationService: IA
         it != null -> Possibly.ret(ResponseModel(200, it.author + ": " + it.content))
         else -> Possibly.Fail(Err.NOT_FOUND)
     }
-
-    private fun countAsResponse(it: Long): ResponseModel = ResponseModel(200, it.toString())
 
 
     private fun toError(it: Err): ResponseModel = ResponseModel(it.status, it.name)
