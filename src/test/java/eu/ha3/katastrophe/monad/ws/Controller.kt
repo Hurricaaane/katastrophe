@@ -17,13 +17,13 @@ class Controller(private val messageService: IMessageService, authenticationServ
     private val daysBetween: DaysBetween = DaysBetween(messageService)
     private val controllerAuthenticationLogic: ControllerAuthenticationLogic
 
-    override fun processRequest(request: RequestModel) = Possibly.ret(request)
+    override fun processRequest(request: RequestModel) = Perhaps.ret(request)
             .verify(controllerAuthenticationLogic::checkAuthentication)
             .bind(this::resolveAndExecuteAction)
             .otherwise(this::toError)
 
-    private fun resolveAndExecuteAction(request: RequestModel): Possibly<ResponseModel> {
-        val ret = Possibly.ret(request)
+    private fun resolveAndExecuteAction(request: RequestModel): Perhaps<ResponseModel> {
+        val ret = Perhaps.ret(request)
 
         return request.method?.let {
             when (it) {
@@ -34,12 +34,12 @@ class Controller(private val messageService: IMessageService, authenticationServ
     }
 
 
-    private fun defaultMethod(request: RequestModel): Possibly<ResponseModel> = Possibly.ret(request)
+    private fun defaultMethod(request: RequestModel): Perhaps<ResponseModel> = Perhaps.ret(request)
             .bind(this::asFetchMessageQuery)
             .bind(messageService::fetchMessage)
             .bind(this::someMessageAsResponse)
 
-    private fun asFetchMessageQuery(it: RequestModel): Possibly<FetchMessageQuery> = Possibly.ret(it)
+    private fun asFetchMessageQuery(it: RequestModel): Perhaps<FetchMessageQuery> = Perhaps.ret(it)
             .verify(this::validateRequestForFetchMessageQuery)
             .map(this::requestToFetchMessageQuery)
 
@@ -51,16 +51,16 @@ class Controller(private val messageService: IMessageService, authenticationServ
     private fun requestToFetchMessageQuery(it: RequestModel): FetchMessageQuery =
             FetchMessageQuery(it.parameters.first { it.key == "id" }.value)
 
-    private fun someMessageAsResponse(it: SomeMessage?): Possibly<ResponseModel> = when {
-        it != null -> Possibly.ret(ResponseModel(200, it.author + ": " + it.content))
-        else -> Possibly.Fail(Err.NOT_FOUND)
+    private fun someMessageAsResponse(it: SomeMessage?): Perhaps<ResponseModel> = when {
+        it != null -> Perhaps.ret(ResponseModel(200, it.author + ": " + it.content))
+        else -> Perhaps.Fail(Err.NOT_FOUND)
     }
 
 
     private fun toError(it: Err): ResponseModel = ResponseModel(it.status, it.name)
 
     class ControllerAuthenticationLogic(private val authenticationService: IAuthenticationService) {
-        fun checkAuthentication(me: RequestModel): Err? = Possibly.ret(me)
+        fun checkAuthentication(me: RequestModel): Err? = Perhaps.ret(me)
                 .verify(this::validateAuthHeader)
                 .map(this::extractAuthorizationHeader)
                 .bind(this::validateTokenType)
@@ -77,10 +77,10 @@ class Controller(private val messageService: IMessageService, authenticationServ
 
         private fun extractAuthorizationHeader(it: RequestModel): String = it.headers.filter { it.key == "Authorization" }.first().values.first()
 
-        private fun validateTokenType(it: String): Possibly<String> = when {
-            !it.startsWith("Bearer ") -> Possibly.Fail(Err.NOT_BEARER_TOKEN)
-            it.trim() != it -> Possibly.Fail(Err.TOKEN_HAS_TRAILING_WHITESPACE)
-            else -> Possibly.ret(it)
+        private fun validateTokenType(it: String): Perhaps<String> = when {
+            !it.startsWith("Bearer ") -> Perhaps.Fail(Err.NOT_BEARER_TOKEN)
+            it.trim() != it -> Perhaps.Fail(Err.TOKEN_HAS_TRAILING_WHITESPACE)
+            else -> Perhaps.ret(it)
         }
 
         private fun extractBearerToken(it: String): String = it.substring("Bearer ".length)
