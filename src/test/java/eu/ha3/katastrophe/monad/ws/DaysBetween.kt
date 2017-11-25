@@ -71,6 +71,15 @@ class DaysBetween(private val useCase: IMessageService) {
                 .bind { function -> perhapsExtractLocalDate(me, "end").map(function) }
     }
 
+    private fun requestCountBetweenQueryC(me: RequestModel): Perhaps<CountBetweenQuery> {
+        val newCountBetweenQueryCurried: (begin: LocalDate) -> (end: LocalDate) -> CountBetweenQuery =
+                ::CountBetweenQuery.curried()
+
+        val begin = perhapsExtractLocalDate(me, "begin");
+        val end = perhapsExtractLocalDate(me, "end");
+        return Perhaps.directmap2(newCountBetweenQueryCurried, begin, end)
+    }
+
 //    private fun requestCountBetweenQueryB(me: RequestModel): Perhaps<CountBetweenQuery> {
 ////        Perhaps.ret { it: RequestModel, param: String -> this.extractLocalDateOrThrow(it, param) }
 ////                .bind { it(me, "begin") }

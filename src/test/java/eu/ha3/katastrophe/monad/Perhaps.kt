@@ -33,6 +33,10 @@ sealed class Perhaps<V> {
         is Perhaps.Vex<V> -> Perhaps.Vex(f(this.vex))
     }
 
+    fun <Vp, A> map2(f: (V) -> (A) -> (Vp), a: Perhaps<A>): Perhaps<Vp> = a.applying(this.applying(Perhaps.ret(f)))
+
+//    fun <Vp, A> map2(f: (V) -> (A) -> (Vp)): Perhaps<((A) -> Vp)> = this.applying(Perhaps.ret(f))
+
     infix fun <Vp> seq(e: Perhaps<Vp>): Perhaps<Vp> = e
 
     infix fun otherwise(t: (Err) -> (V)): V = when (this) {
@@ -57,5 +61,8 @@ sealed class Perhaps<V> {
 
     companion object {
         fun <V> ret(a: V) = Vex(a)
+
+        fun <Vp, V, A> directmap2(f: (V) -> (A) -> (Vp), v: Perhaps<V>, a: Perhaps<A>): Perhaps<Vp> =
+                a.applying(v.applying(Perhaps.ret(f)))
     }
 }
